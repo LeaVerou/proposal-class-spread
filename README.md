@@ -21,7 +21,7 @@
 8. [Implementation](#implementation)
 9. [Discussion / Q \& A](#discussion--q--a)
 	1. [Lexical vs dynamic `super`](#lexical-vs-dynamic-super)
-	2. [What should happen with private fields?](#what-should-happen-with-private-fields)
+	2. [What should happen with private elements?](#what-should-happen-with-private-elements)
 	3. [Is it possible to introspect whether a given class has been spread onto another?](#is-it-possible-to-introspect-whether-a-given-class-has-been-spread-onto-another)
 	4. [Can built-in classes be spread?](#can-built-in-classes-be-spread)
 
@@ -487,13 +487,15 @@ console.log(new C().foo()); // "B Trait"
 
 That said, use cases that need dynamic superclasses might be better suited to subclass factories.
 
-### What should happen with private fields?
+### What should happen with private elements?
 
-Ideally, private fields would be copied as well, and any references to them would resolve based on the host class's corresponding private field.
+Ideally, private elements would be copied as well, and any references to them would resolve based on the host class's corresponding private element.
+These would be _separate_ from the spread class's private elements: it would be just a shorthand for creating new private elements.
 
 While at first it seems like that would violate encapsulation, it does not reveal anything that is not already revealed by simply accessing the class's [[SourceText]].
 
-However, it seems like that may be harder to implement, especially if the semantics are not those of syntactic expansion.
+However, it seems like that may be harder to implement (unless the semantics are those of [syntactic expansion](#alternative-model-syntactic-expansion), which seems unlikely).
+In that case, it would be an acceptable compromise to simply not copy private elements, and have any methods referring to them throw (as would happen with assignment).
 
 ### Is it possible to introspect whether a given class has been spread onto another?
 
