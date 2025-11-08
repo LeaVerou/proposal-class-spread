@@ -397,6 +397,12 @@ However:
 - Decorators are not interleaved with other class elements, but are executed after all other class elements have been defined, so there is no elegant way to override a method or field defined by a decorator.
 - The only ways to add new API surface to the existing class are either to (a) use `addInitializer()` and basically do the same things as prototype fudging, with the same pros & cons OR (b) return a new subclass of the class being decorated, with the same pros & cons as subclass factories.
 
+#### [First-class Protocols](https://github.com/tc39/proposal-first-class-protocols)
+
+Protocols elegantly solve the problem of naming collisions by using symbols.
+The downside is that since most classes want to expose a string-based API, this involves a lot of glue code.
+However, since one goal of this proposal is to make it easier to _generate_ API glue code for classes, it can be **synergetically combined with the protocol proposal to improve ergonomics**.
+
 #### [Class field introspection](https://github.com/leaverou/proposal-class-field-introspection/)
 
 The [class field introspection proposal](https://github.com/leaverou/proposal-class-field-introspection/) is a proposal for exposing a read-only data structure containing class fields.
