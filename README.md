@@ -18,9 +18,6 @@
 7. [Comparison](#comparison)
 	1. [Other languages](#other-languages)
 	2. [Other proposals](#other-proposals)
-	3. [Maximally minimal mixins (Subclass factories)](#maximally-minimal-mixins-subclass-factories)
-	4. [Decorators](#decorators)
-	5. [Class field introspection](#class-field-introspection)
 8. [Implementation](#implementation)
 9. [Discussion / Q \& A](#discussion--q--a)
 	1. [Lexical vs dynamic `super`](#lexical-vs-dynamic-super)
@@ -88,6 +85,8 @@ class A {
 
 console.log(new A().foo()); // 2
 ```
+
+As discussed in the [comparison with decorators](#decorators) section below, when class decorators are primarily meant to modify classes and class members, rather than to compose classes from building blocks. While they _can_ be used for this purpose, they simply provide better ergonomics over these two patterns, rather than a new mechanism to compose classes from building blocks.
 
 In other areas of the language, the **spread syntax** can be used to compose an object from multiple other objects of the same or similar type.
 We have it for iterables:
@@ -385,11 +384,11 @@ See [Class Composition: Existing proposals](https://github.com/webplatformco/pro
 
 Here we discuss them in the context of this proposal.
 
-### [Maximally minimal mixins](https://github.com/tc39/proposal-mixins) (Subclass factories)
+#### [Maximally minimal mixins](https://github.com/tc39/proposal-mixins) (Subclass factories)
 
 As discussed in [Motivation](#motivation), subclass factories are a prevalent pattern for class composition, but affect the inheritance chain, which is not always desirable.
 
-### [Decorators](https://github.com/tc39/proposal-decorators)
+#### [Decorators](https://github.com/tc39/proposal-decorators)
 
 Conceptually, decorators are meant as a way to modify a class or class member, rather than as a way to compose classes from other classes or objects.
 However, it _is_ possible to use decorators in that way: one can define a class decorator that also takes one or more classes or objects as parameters and extends the class with them.
@@ -398,7 +397,7 @@ However:
 - Decorators are not interleaved with other class elements, but are executed after all other class elements have been defined, so there is no elegant way to override a method or field defined by a decorator.
 - The only ways to add new API surface to the existing class are either to (a) use `addInitializer()` and basically do the same things as prototype fudging, with the same pros & cons OR (b) return a new subclass of the class being decorated, with the same pros & cons as subclass factories.
 
-### [Class field introspection](https://github.com/leaverou/proposal-class-field-introspection/)
+#### [Class field introspection](https://github.com/leaverou/proposal-class-field-introspection/)
 
 The [class field introspection proposal](https://github.com/leaverou/proposal-class-field-introspection/) is a proposal for exposing a read-only data structure containing class fields.
 
