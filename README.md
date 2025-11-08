@@ -16,6 +16,11 @@
 	1. [Spreading a class into another class definition](#spreading-a-class-into-another-class-definition)
 	2. [Spreading an object into a class definition](#spreading-an-object-into-a-class-definition)
 7. [Comparison](#comparison)
+	1. [Other languages](#other-languages)
+	2. [Other proposals](#other-proposals)
+	3. [Maximally minimal mixins (Subclass factories)](#maximally-minimal-mixins-subclass-factories)
+	4. [Decorators](#decorators)
+	5. [Class field introspection](#class-field-introspection)
 8. [Implementation](#implementation)
 9. [Discussion / Q \& A](#discussion--q--a)
 	1. [Lexical vs dynamic `super`](#lexical-vs-dynamic-super)
@@ -65,12 +70,12 @@ Currently, the only mechanisms in the language for reusing class API surface are
 2. [Subclass factories](https://github.com/tc39/proposal-mixins) to emulate multiple inheritance by piggybacking on single inheritance
 3. Good ol' low-level prototype _frobnication_. 😅
 
-However, the inheritance chain is observable from the outside and thus, inheritance-based methods can feel heavyweight and/or backwards incompatible, especially for minor code reuse tasks not intrinsically related to the class identity.
+However, the inheritance chain is observable from the outside and thus, **inheritance-based methods** can feel heavyweight and/or backwards incompatible, especially for minor code reuse tasks not intrinsically related to the class identity.
 
-Low-level prototype fudging can be done transparently, but has awkward ergonomics (needs to be a separate step), and does not have access to all class features (e.g. class fields).
+**Low-level prototype _frobnication_** can be done transparently, but has awkward ergonomics (needs to be a separate step), and does not have access to all class features (e.g. class fields).
 Additionally, having to be done imperatively, after the class definition, means that it cannot be interleaved with other methods — if the host class author wants to override a method, that _also_ needs to be done imperatively.
 
-Static initialization blocks help a little with ergonomics, but are executed after any methods have been defined, so any methods they add cannot be overridden by the host class author:
+**Static initialization blocks** help a little with ergonomics, but are executed after any methods have been defined, so any methods they add cannot be overridden by the host class author:
 
 ```js
 class A {
@@ -291,7 +296,8 @@ Spreading arbitrary classes onto arbitrary classes will often produce unexpected
 
 A few limitations that make it unsuitable for some use cases:
 - There is no way to introspect whether a given class has been spread onto another
-- There is no way to compose functions (e.g. to add side effects to lifecycle hooks) or otherwise handle naming collisions gracefully
+- There is no way to compose functions (e.g. to add side effects to lifecycle hooks)
+- There is no declarative mechanism to handle naming collisions gracefully (e.g. via renaming)
 - `super` remains lexically bound, which can be surprising
 - Referencing private fields will produce errors since they are not spread
 
@@ -354,6 +360,8 @@ There is no way to specify class fields through spreading an object.
 
 ## Comparison
 
+### Other languages
+
 See [prior art](../../prior-art.md) for a discussion on current userland patterns and related features in other languages.
 
 To my knowledge, no existing mainstream language provides this symmetric, body-order-based override behavior for class composition.
@@ -370,6 +378,31 @@ However, Ruby’s precedence rules are asymmetric and not fully order-local:
 By contrast, this proposal defines composition in terms of source order of class elements, consistent with the way spread syntax works in other areas of the language.
 
 More languages support mixins-as-macros (e.g. Common Lisp, Nim, D, and Rust — sort of), though in those cases the semantics are purely those of syntactic expansion.
+
+### Other proposals
+
+See [Class Composition: Existing proposals](https://github.com/webplatformco/project-class-composition/tree/main?tab=readme-ov-file#existing-proposals) for a discussion on other proposals related to class composition.
+
+Here we discuss them in the context of this proposal.
+
+### [Maximally minimal mixins](https://github.com/tc39/proposal-mixins) (Subclass factories)
+
+As discussed in [Motivation](#motivation), subclass factories are a prevalent pattern for class composition, but affect the inheritance chain, which is not always desirable.
+
+### [Decorators](https://github.com/tc39/proposal-decorators)
+
+Conceptually, decorators are meant as a way to modify a class or class member, rather than as a way to compose classes from other classes or objects.
+However, it _is_ possible to use decorators in that way: one can define a class decorator that also takes one or more classes or objects as parameters and extends the class with them.
+
+However:
+- Decorators are not interleaved with other class elements, but are executed after all other class elements have been defined, so there is no elegant way to override a method or field defined by a decorator.
+- The only ways to add new API surface to the existing class are either to (a) use `addInitializer()` and basically do the same things as prototype fudging, with the same pros & cons OR (b) return a new subclass of the class being decorated, with the same pros & cons as subclass factories.
+
+### [Class field introspection](https://github.com/leaverou/proposal-class-field-introspection/)
+
+The [class field introspection proposal](https://github.com/leaverou/proposal-class-field-introspection/) is a proposal for exposing a read-only data structure containing class fields.
+
+It is complementary to this proposal: without it, class fields are spread by directly taking them from [[Fields]], whereas with it, it can be used to explain and polyfill class spread syntax.
 
 ## Implementation
 
