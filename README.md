@@ -1,5 +1,30 @@
 # Class Spread Syntax
 
+<details open>
+<summary><strong>Table of contents</strong></summary>
+
+1. [Status](#status)
+2. [Overview](#overview)
+3. [Motivation](#motivation)
+4. [Use cases](#use-cases)
+	1. [Class modularization](#class-modularization)
+	2. [Certain mixin use cases](#certain-mixin-use-cases)
+	3. [Supporting both a procedural and OOP API](#supporting-both-a-procedural-and-oop-api)
+	4. [Dynamically generating API surface](#dynamically-generating-api-surface)
+5. [Limitations](#limitations)
+6. [Detailed design](#detailed-design)
+	1. [Spreading a class into another class definition](#spreading-a-class-into-another-class-definition)
+	2. [Spreading an object into a class definition](#spreading-an-object-into-a-class-definition)
+7. [Comparison](#comparison)
+8. [Implementation](#implementation)
+9. [Discussion / Q \& A](#discussion--q--a)
+	1. [Lexical vs dynamic `super`](#lexical-vs-dynamic-super)
+	2. [What should happen with private fields?](#what-should-happen-with-private-fields)
+	3. [Is it possible to introspect whether a given class has been spread onto another?](#is-it-possible-to-introspect-whether-a-given-class-has-been-spread-onto-another)
+	4. [Can built-in classes be spread?](#can-built-in-classes-be-spread)
+
+</details>
+
 ## Status
 
 Champion(s): Lea Verou
@@ -7,6 +32,31 @@ Champion(s): Lea Verou
 Author(s): Lea Verou
 
 Stage: 0
+
+
+## Overview
+
+This proposal introduces body-order-sensitive composition for classes through a spread syntax inspired from object spread syntax.
+Mixin application is treated as a class element, applied in the order it appears, interleaved with method and field definitions.
+
+```js
+import * as methods from "./methods.js";
+
+class A {
+	foo() { console.log("foo"); }
+	static bar = "bar";
+}
+
+class C {
+	...A;
+	...methods;
+}
+
+console.log(B.bar); // "bar"
+(new B).foo(); // "foo"
+```
+
+It is meant as a modularization and code reuse tool for the more tightly coupled use cases, rather than a more general solution to all class composition use cases.
 
 ## Motivation
 
@@ -260,25 +310,6 @@ console.log(b.foo);
 ```
 
 ## Detailed design
-
-The spread syntax for classes is used to compose a class from other classes or objects:
-
-```js
-import * as methods from "./methods.js";
-
-class A {
-	foo() { console.log("foo"); }
-	static bar = "bar";
-}
-
-class C {
-	...A;
-	...methods;
-}
-
-console.log(B.bar); // "bar"
-(new B).foo(); // "foo"
-```
 
 Like object spread, the semantics are largely those of assignment.
 Unlike object spread, copying is done by copying *descriptors*, not *values*.
