@@ -13,8 +13,8 @@
 	4. [Dynamically generating API surface](#dynamically-generating-api-surface)
 5. [Limitations](#limitations)
 6. [Detailed design](#detailed-design)
-	1. [Spreading a class into another class definition](#spreading-a-class-into-another-class-definition)
-	2. [Spreading an object into a class definition](#spreading-an-object-into-a-class-definition)
+	1. [Requirements](#requirements)
+	2. [Spreading a constructor function into another class definition](#spreading-a-constructor-function-into-another-class-definition)
 7. [Comparison](#comparison)
 	1. [Other languages](#other-languages)
 	2. [Other proposals](#other-proposals)
@@ -316,46 +316,71 @@ console.log(b.foo);
 
 ## Detailed design
 
-Like object spread, the semantics are largely those of assignment.
-Unlike object spread, copying is done by copying *descriptors*, not *values*.
+### Requirements
 
-### Spreading a class into another class definition
+It is important for this to be able to specify fields, accessors, _and_ methods.
+This means that while (like object spread) the semantics are largely those of assignment,
+unlike object spread, **it is *descriptors* not values that are copied**.
 
-Spreading a class copies (descriptors for):
+Additionally, to satisfy use cases it is important to be able to spread _both_ objects and constructor functions,
+so the algorithm needs to be able to handle both cases with good DX.
+This means that `class A { ...B }` would need to copy instance and static members from `B` onto `A`,
+but if `B` is a regular object (such as that obtained via `import * as B from "./b.js"`),
+that needs to be specifying instance members as well, without having to wrap them in boilerplate.
+Meaning, authors should not have do do this:
+
+```js
+import * as Partial from "./partial.js";
+class A {
+	...{ prototype: Partial };
+}
+```
+One area for potential compromise is the DX of spreading constructor functions specified manually via prototype fudging.
+Since most classes worth spreading would be defined via a class definition,
+it’s okay if that has slightly worse ergonomics.
+
+A model that can handle both high priority cases seems like it could use `Partial.prototype` as the source of instance members if it exists, and `Partial` otherwise.
+Given that with class definitions, `Partial.prototype.constructor === Partial`, both cases can specify static members as well,
+in objects by manually specifying a `constructor` property, whereas in classes the default semantics just work.
+
+To summarize, the algorithm could look like this:
+1. Define the _Spread source_ object as either the object’s [[Prototype]] if non-empty, or the object being spread otherwise.
+If that’s too weird, the distinction could be around whether `typeof obj === "function"` is true.
+1. If the _Spread source_ object has an own `constructor` property, copy its descriptors onto the constructor.
+2. If the object being spread includes an internal [[Fields]] slot, port these fields over (or just the private ones, see discussion below)
+
+This would produce reasonable DX for spreading both objects and constructor functions,
+regardless of what produced them.
+Additionally, if something like [class field introspection](https://github.com/leaverou/proposal-class-field-introspection/) is adopted,
+it would allow providing fields by spreading regular objects too, by simply providing a `Symbol.fields`/`Symbol.publicFields` property on the object.
+
+### Spreading a constructor function into another class definition
+
+As described above, spreading a constructor function copies (descriptors for):
 - Instance members
 - Static members
 - All public [[Fields]]
 
 It does _not_ copy:
-- Any fields or members in [[PrivateElements]]
+- Any fields or members in [[PrivateElements]] (TBD, see discussion below)
 - Static initialization blocks (but it does copy their side effects, since by then they have already executed)
-
-> [!NOTE]
-> What should happen with decorators?
+- Decorators. Those have already been applied to the class by then.
 
 It does not affect the class's [[SourceText]], which includes the spread syntax itself.
-
 `super` remains lexically bound, akin to regular assignment (see discussion below).
 
 #### Alternative model: syntactic expansion
 
-An alternative model would be that of syntactic expansion, where we baseically use [[SourceText]] as-is and simply remove everything that is not in [ClassBody](https://tc39.es/ecma262/multipage/ecmascript-language-functions-and-classes.html#prod-ClassBody).
+An alternative model would be that of syntactic expansion, where we basically use [[SourceText]] as-is and simply remove everything that is not in [ClassBody](https://tc39.es/ecma262/multipage/ecmascript-language-functions-and-classes.html#prod-ClassBody).
 
-Then `super` would resolve dynamically, we could copy private fields, declarations, etc.
-On the other hand, references would not be preserved.
+Pros:
+- `super` would resolve dynamically,
+- Private fields would also be copied
+- Static initialization blocks, decorators would be preserved rather than simply their side effects
 
-While this seems like it would match author intent more closely, there is no precedent in the language for such a model, and that is not how spread syntax works in any other area of the language.
-
-### Spreading an object into a class definition
-
-Spreading an object copies the object's own descriptors onto the constructor `[[Prototype]]`.
-While the copying is generally shallow, it does descend into the `constructor` property, if present.
-This allows objects to be constructed such that they add both instance and static members.
-
-There is no way to specify class fields through spreading an object.
-
-> [!NOTE]
-> Should there be? E.g. through a known `Symbol` property?
+Cons:
+- References would not be preserved. Every member would be a brand new object, rather than a reference to the original.
+- While this seems like it would match author intent more closely, there is no precedent in the language for such a model, and that is not how spread syntax works in any other area of the language.
 
 ## Comparison
 
@@ -411,18 +436,37 @@ It is complementary to this proposal: without it, class fields are spread by dir
 
 ## Implementation
 
-Spreading a class into another class definition could desugar to something like:
+Spreading an object into another class definition could desugar to something like the following.
+Using `Symbol.fields` to represent class fields, which can be internal magic if [class field introspection](https://github.com/leaverou/proposal-class-field-introspection/) is not adopted.
 
 ```js
-const instanceDescriptors = Object.getOwnPropertyDescriptors(A.prototype);
-for (const key in instanceDescriptors) {
-	if (key === "constructor") continue;
-	Object.defineProperty(B.prototype, key, instanceDescriptors[key]);
+function extendClass (Base, Partial) {
+	if (!Base.prototype) {
+		return;
+	}
+
+	let proto = Partial.prototype || Partial;
+	let fields = Partial[Symbol.fields];
+	// Exclude name, length, constructor etc.
+	let exclude = Object.getOwnPropertyNames(Function.prototype);
+
+	copyDescriptors(Base.prototype, proto, { exclude });
+	// Statics
+	copyDescriptors(Base, proto.constructor, { exclude });
+
+	if (fields?.length > 0) {
+		// Fictional, since even if field introspection is adopted,
+		// it would be read-only at first
+		Base[Symbol.publicFields].push(...fields);
+	}
 }
-const staticDescriptors = Object.getOwnPropertyDescriptors(A);
-for (const key in staticDescriptors) {
-	if (["length", "name", "prototype"].includes(key)) continue;
-	Object.defineProperty(B, key, staticDescriptors[key]);
+
+function copyDescriptors (target, obj, {exclude = []} = {}) {
+	let descriptors = Object.getOwnPropertyDescriptors(obj);
+	for (const key in descriptors) {
+		if (exclude.includes(key)) continue;
+		Object.defineProperty(target, key, descriptors[key]);
+	}
 }
 ```
 
