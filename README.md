@@ -324,9 +324,9 @@ unlike object spread, **it is *descriptors* not values that are copied**.
 
 Additionally, to satisfy use cases it is important to be able to spread _both_ objects and constructor functions,
 so the algorithm needs to be able to handle both cases with good DX.
-This means that `class A { ...B }` would need to copy instance and static members from `B` onto `A`,
-but if `B` is a regular object (such as that obtained via `import * as B from "./b.js"`),
-that needs to be specifying instance members as well, without having to wrap them in boilerplate.
+This means that `class A { ...Partial }` would need to copy instance and static members from `Partial` onto `A` if `Partial` is a constructor function,
+but if `Partial` is a regular object (such as that obtained via `import * as Partial from "./partial.js"`),
+that needs to be specifying instance members as well, without having to wrap them in a boilerplate `{prototype: Partial}`.
 Meaning, authors should not have do do this:
 
 ```js
@@ -335,6 +335,7 @@ class A {
 	...{ prototype: Partial };
 }
 ```
+
 One area for potential compromise is the DX of spreading constructor functions specified manually via prototype fudging.
 Since most classes worth spreading would be defined via a class definition,
 it’s okay if that has slightly worse ergonomics.
