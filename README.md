@@ -13,8 +13,10 @@
 	4. [Dynamically generating API surface](#dynamically-generating-api-surface)
 5. [Limitations](#limitations)
 6. [Detailed design](#detailed-design)
-	1. [Requirements](#requirements)
-	2. [Spreading a constructor function into another class definition](#spreading-a-constructor-function-into-another-class-definition)
+	1. [Copy by descriptor rather than value](#copy-by-descriptor-rather-than-value)
+	2. [Handling spreading of both objects and constructor functions](#handling-spreading-of-both-objects-and-constructor-functions)
+	3. [Providing fields when spreading plain objects](#providing-fields-when-spreading-plain-objects)
+	4. [Spreading a constructor function into another class definition](#spreading-a-constructor-function-into-another-class-definition)
 7. [Comparison](#comparison)
 	1. [Other languages](#other-languages)
 	2. [Other proposals](#other-proposals)
@@ -316,43 +318,28 @@ console.log(b.foo);
 
 ## Detailed design
 
-### Requirements
+### Copy by descriptor rather than value
 
 It is important for this to be able to specify fields, accessors, _and_ methods.
 This means that while (like object spread) the semantics are largely those of assignment,
 unlike object spread, **it is *descriptors* not values that are copied**.
 
-Additionally, to satisfy use cases it is important to be able to spread _both_ objects and constructor functions,
+### Handling spreading of both objects and constructor functions
+
+To satisfy use cases it is important to be able to spread _both_ objects and constructor functions,
 so the algorithm needs to be able to handle both cases with good DX.
-This means that `class A { ...Partial }` would need to copy instance and static members from `Partial` onto `A` if `Partial` is a constructor function,
-but if `Partial` is a regular object (such as that obtained via `import * as Partial from "./partial.js"`),
-that needs to be specifying instance members as well, without having to wrap them in a boilerplate `{prototype: Partial}`.
-Meaning, authors should not have do do this:
 
-```js
-import * as Partial from "./partial.js";
-class A {
-	...{ prototype: Partial };
-}
-```
+When spreading a constructor function, semantics are straightforward: instance members become instance members, and static members become static members.
+But how does  `class A { ...Partial }` work when `Partial` is an object?
+Most use cases need to specify instance members, but to support that (without wrapping it in a boilerplate `{prototype: Partial}`) we'd need to introduce "magic" like:
+- If there is a `prototype` property, use it as the source of instance members, otherwise use the object itself OR
+- If the object is a function, then use its prototype as the source of instance members, otherwise use the object itself
 
-One area for potential compromise is the DX of spreading constructor functions specified manually via prototype fudging.
-Since most classes worth spreading would be defined via a class definition,
-it’s okay if that has slightly worse ergonomics.
+It may be better to take the small DX hit of having to do `class A { ...{ prototype: Partial } }` in exchange for the predictability that instance methods are always copied from `Partial.prototype`, and static methods are always copied from `Partial`.
 
-A model that can handle both high priority cases seems like it could use `Partial.prototype` as the source of instance members if it exists, and `Partial` otherwise.
-Given that with class definitions, `Partial.prototype.constructor === Partial`, both cases can specify static members as well,
-in objects by manually specifying a `constructor` property, whereas in classes the default semantics just work.
+### Providing fields when spreading plain objects
 
-To summarize, the algorithm could look like this:
-1. Define the _Spread source_ object as either the object’s [[Prototype]] if non-empty, or the object being spread otherwise.
-If that’s too weird, the distinction could be around whether `typeof obj === "function"` is true.
-1. If the _Spread source_ object has an own `constructor` property, copy its descriptors onto the constructor.
-2. If the object being spread includes an internal [[Fields]] slot, port these fields over (or just the private ones, see discussion below)
-
-This would produce reasonable DX for spreading both objects and constructor functions,
-regardless of what produced them.
-Additionally, if something like [class field introspection](https://github.com/leaverou/proposal-class-field-introspection/) is adopted,
+If something like [class field introspection](https://github.com/leaverou/proposal-class-field-introspection/) is adopted,
 it would allow providing fields by spreading regular objects too, by simply providing a `Symbol.fields`/`Symbol.publicFields` property on the object.
 
 ### Spreading a constructor function into another class definition
@@ -446,19 +433,17 @@ function extendClass (Base, Partial) {
 		return;
 	}
 
-	let proto = Partial.prototype || Partial;
-	let fields = Partial[Symbol.fields];
 	// Exclude name, length, constructor etc.
 	let exclude = Object.getOwnPropertyNames(Function.prototype);
 
-	copyDescriptors(Base.prototype, proto, { exclude });
+	copyDescriptors(Base.prototype, Partial.prototype, { exclude });
 	// Statics
-	copyDescriptors(Base, proto.constructor, { exclude });
+	copyDescriptors(Base, Partial, { exclude });
 
-	if (fields?.length > 0) {
+	if (Partial[Symbol.publicFields]?.length > 0) {
 		// Fictional, since even if field introspection is adopted,
 		// it would be read-only at first
-		Base[Symbol.publicFields].push(...fields);
+		Base[Symbol.publicFields].push(...Partial[Symbol.publicFields]);
 	}
 }
 
