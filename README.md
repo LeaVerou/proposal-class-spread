@@ -7,9 +7,9 @@
 2. [Overview](#overview)
 3. [Motivation](#motivation)
 4. [Use cases](#use-cases)
-	1. [Class modularization](#class-modularization)
+	1. [Class modularity](#class-modularity)
 	2. [Certain mixin use cases](#certain-mixin-use-cases)
-	3. [Supporting both a procedural and OOP API](#supporting-both-a-procedural-and-oop-api)
+	3. [Code sharing across procedural and OOP APIs](#code-sharing-across-procedural-and-oop-apis)
 	4. [Dynamically generating API surface](#dynamically-generating-api-surface)
 5. [Limitations](#limitations)
 6. [Detailed design](#detailed-design)
@@ -125,56 +125,73 @@ something that userland code cannot do today. -->
 
 ## Use cases
 
-### Class modularization
+### Class modularity
 
 For large classes, it is impractical to maintain the entire class API in a single file.
-However, the ergonomics of modularization are not great, and require a lot of glue code:
+However, the ergonomics of modularization are not great, and require a lot of glue code.
+This is a simplified real example from the [Prism](https://github.com/PrismJS/prism) v2 branch (f[ull source](https://github.com/PrismJS/prism/blob/v2/src/core/classes/prism.js)):
 
-
-`methods/foo.js`:
 ```js
-export function foo(...args) {
-	let arg = this ?? args.shift();
-	/* elided */
-}
-```
-`methods/bar.js`:
-```js
-export function bar() {
-	let arg = this ?? args.shift();
-	/* elided */
-}
-```
+import { highlightAll } from '../highlight-all.js';
+import { highlightElement } from '../highlight-element.js';
+import { highlight } from '../highlight.js';
+import { tokenize } from '../tokenize/tokenize.js';
 
-`class.js`:
-```js
-import {foo} from "./methods/foo.js";
-import {bar} from "./methods/bar.js";
-
-export default class Class {
-	foo(...args) {
-		return foo.call(this, ...args);
+export default class Prism {
+	highlightAll (options = {}) {
+		return highlightAll.call(this, options);
 	}
-	bar(...args) {
-		return bar.call(this, ...args);
+
+	highlightElement (element, options = {}) {
+		return highlightElement.call(this, element, options);
 	}
-	// ...
+
+	highlight (text, language, options = {}) {
+		return highlight.call(this, text, language, options);
+	}
+
+	tokenize (text, grammar) {
+		return tokenize.call(this, text, grammar);
+	}
 }
 ```
 
-With regular JS, one can avoid maintaining the API in two places, by using `...args` as shown above.
+With regular JS, one can avoid maintaining the method signatures in two places, by using `...args`.
+E.g. we could have done this instead which minimizes knowledge duplication:
+
+```js
+export default class Prism {
+	highlightAll (...args) {
+		return highlightAll.call(this, ...args);
+	}
+
+	highlightElement (...args) {
+		return highlightElement.call(this, ...args);
+	}
+
+	highlight (...args) {
+		return highlight.call(this, ...args);
+	}
+
+	tokenize (...args) {
+		return tokenize.call(this, ...args);
+	}
+}
+```
+
 However with typed variants of the language (e.g. TypeScript), there is no way to avoid duplicating the function signatures.
 
 With a spread syntax, it could look like this:
 
-`class.js`:
 ```js
-import * as methods from "./methods/index.js";
+import * as methods from "./methods.js";
 
-export default class Class {
+export default class Prism {
 	...methods;
 }
 ```
+
+There are even more egregious examples of this need in the wild, like [this Babel class](https://github.com/babel/babel/blob/master/packages/babel-traverse/src/path/index.js).
 
 ### Certain mixin use cases
 
@@ -184,7 +201,7 @@ In some ways it’s analogous to the difference between object spread (which doe
 
 > TODO: Add more concrete use cases.
 
-### Supporting both a procedural and OOP API
+### Code sharing across procedural and OOP APIs
 
 There are use cases where a module wants to provide both a procedural API and an OOP one.
 E.g. [Color.js](https://www.npmjs.com/package/colorjs.io) does this.
@@ -284,6 +301,17 @@ const formProperties = [
 	//...
 ];
 class MyElement extends HTMLElement {
+	constructor() {
+		super();
+
+		// Cannot use #internals because subclasses need access
+		this._internals = this.attachInternals();
+
+		this.addEventListener("input", () => {
+			this._internals.setFormValue(this.value);
+		});
+	}
+
 	...formProperties.reduce((acc, prop) => Object.defineProperty(acc, prop, { get: () => this._internals[prop] }), {});
 }
 ```
