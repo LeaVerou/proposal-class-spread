@@ -191,7 +191,7 @@ export default class Prism {
 }
 ```
 
-There are even more egregious examples of this need in the wild, like [this Babel class](https://github.com/babel/babel/blob/master/packages/babel-traverse/src/path/index.js).
+There are even more egregious examples of this need in the wild, like [this Babel class](https://github.com/babel/babel/blob/main/packages/babel-traverse/src/path/index.ts).
 
 ### Certain mixin use cases
 
